@@ -3,7 +3,12 @@ aptPkgs = [
   "chromium",
   "libglib2.0-0",
   "libnss3",
-  "libfontconfig1"
+  "libfontconfig1",
+  "libxss1",          # Adicionado: para XSS (X Screen Saver)
+  "libasound2",       # Adicionado: para som, mesmo em headless
+  "libatk1.0-0",      # Adicionado: para Acessibilidade Toolkit
+  "libgtk-3-0",       # Adicionado: para GTK+3 (GUI toolkit)
+  "xvfb"              # Adicionado: Servidor X virtual, pode ajudar em headless environments
 ]
 
 [start]
