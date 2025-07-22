@@ -4,20 +4,21 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 import json
 import os
 
-# Mongo URI via variável de ambiente
+# MongoDB Atlas
 uri = os.getenv("MONGO_URI")
-
 client = MongoClient(uri, server_api=ServerApi('1'))
+
 try:
     client.admin.command('ping')
     print("Conectado ao MongoDB com sucesso!")
 except Exception as e:
-    print(e)
+    print(f"Erro ao conectar no MongoDB: {e}")
 
 app = Flask(__name__)
 cache_resultados = {}  # Cache simples em memória
@@ -30,16 +31,20 @@ def comparar_precos():
 
     medicamento = medicamento.lower()
 
-    # Verifica cache
+    # Cache
     if medicamento in cache_resultados:
         return jsonify({'medicamentos': cache_resultados[medicamento]})
 
-    def buscar_maxxi(medicamento):
+    def criar_driver():
         chrome_options = Options()
+        chrome_options.binary_location = "/usr/bin/chromium"
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        driver = webdriver.Chrome(options=chrome_options)
+        return webdriver.Chrome(executable_path=ChromeDriverManager().install(), options=chrome_options)
+
+    def buscar_maxxi(medicamento):
+        driver = criar_driver()
         try:
             url = f"https://www.maxxieconomica.com/busca-produtos?busca={medicamento}"
             driver.get(url)
@@ -61,15 +66,13 @@ def comparar_precos():
             driver.quit()
 
     def buscar_sao_joao(medicamento):
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        driver = webdriver.Chrome(options=chrome_options)
+        driver = criar_driver()
         try:
             url = f"https://www.saojoaofarmacias.com.br/{medicamento.replace(' ', '%20')}?_q={medicamento.replace(' ', '%20')}&map=ft"
             driver.get(url)
-            WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.TAG_NAME, 'script')))
+            WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.TAG_NAME, 'script'))
+            )
             scripts = driver.find_elements(By.TAG_NAME, 'script')
             resultados = []
             for script in scripts:
@@ -94,9 +97,9 @@ def comparar_precos():
         finally:
             driver.quit()
 
-    medicamentos_maxxi = buscar_maxxi(medicamento)
-    medicamentos_sao_joao = buscar_sao_joao(medicamento)
-    todos = medicamentos_maxxi + medicamentos_sao_joao
+    resultados_maxxi = buscar_maxxi(medicamento)
+    resultados_sao_joao = buscar_sao_joao(medicamento)
+    todos = resultados_maxxi + resultados_sao_joao
     todos_ordenados = sorted(todos, key=lambda x: x['preco']) if todos else []
 
     if todos_ordenados:
