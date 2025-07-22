@@ -5,7 +5,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
-from webdriver_manager.utils import ChromeType
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 import json
@@ -30,7 +29,7 @@ def criar_driver():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     return webdriver.Chrome(
-        executable_path=ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install(),
+        executable_path=ChromeDriverManager().install(),
         options=chrome_options
     )
 
@@ -99,10 +98,8 @@ def comparar_precos():
         finally:
             driver.quit()
 
-    maxxi = buscar_maxxi(medicamento)
-    sao_joao = buscar_sao_joao(medicamento)
-    todos = maxxi + sao_joao
-    ordenados = sorted(todos, key=lambda x: x['preco']) if todos else []
+    resultados = buscar_maxxi(medicamento) + buscar_sao_joao(medicamento)
+    ordenados = sorted(resultados, key=lambda x: x['preco']) if resultados else []
 
     if ordenados:
         cache_resultados[medicamento] = ordenados
