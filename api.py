@@ -4,23 +4,18 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import json
-import os uri = os.getenv("MONGO_URI")
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
-chrome_options = Options()
-chrome_options.add_argument("--headless")
-chrome_options.add_argument("--no-sandbox")
-chrome_options.add_argument("--disable-dev-shm-usage")
-driver = webdriver.Chrome(options=chrome_options)
+import json
+import os
 
-uri = "mongodb+srv://admin:ilovepharmasearch@pharmasearch-cluster.facv1dr.mongodb.net/?retryWrites=true&w=majority&appName=pharmasearch-cluster"
+# Mongo URI via variável de ambiente
+uri = os.getenv("MONGO_URI")
 
 client = MongoClient(uri, server_api=ServerApi('1'))
-
 try:
     client.admin.command('ping')
-    print("Pinged your deployment. You successfully connected to MongoDB!")
+    print("Conectado ao MongoDB com sucesso!")
 except Exception as e:
     print(e)
 
@@ -35,13 +30,15 @@ def comparar_precos():
 
     medicamento = medicamento.lower()
 
-    # Verifica se já temos em cache
+    # Verifica cache
     if medicamento in cache_resultados:
         return jsonify({'medicamentos': cache_resultados[medicamento]})
 
     def buscar_maxxi(medicamento):
         chrome_options = Options()
         chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
         driver = webdriver.Chrome(options=chrome_options)
         try:
             url = f"https://www.maxxieconomica.com/busca-produtos?busca={medicamento}"
@@ -66,6 +63,8 @@ def comparar_precos():
     def buscar_sao_joao(medicamento):
         chrome_options = Options()
         chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
         driver = webdriver.Chrome(options=chrome_options)
         try:
             url = f"https://www.saojoaofarmacias.com.br/{medicamento.replace(' ', '%20')}?_q={medicamento.replace(' ', '%20')}&map=ft"
@@ -102,7 +101,6 @@ def comparar_precos():
 
     if todos_ordenados:
         cache_resultados[medicamento] = todos_ordenados
-
         db = client['pharmasearch']
         collection = db['medicamentos']
         existente = collection.find_one({'medicamento': medicamento})
@@ -117,8 +115,6 @@ def comparar_precos():
     else:
         return jsonify({'erro': 'Nenhum medicamento encontrado'}), 404
 
-
 if __name__ == '__main__':
-    app.run(debug=True)
-
-#http://127.0.0.1:5000/comparar_precos?medicamento=dipirona
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
