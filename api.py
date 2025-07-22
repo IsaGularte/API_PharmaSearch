@@ -6,11 +6,13 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.utils import ChromeType
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 import json
 import os
 
+# 🔐 Conexão com MongoDB Atlas
 uri = os.getenv("MONGO_URI")
 client = MongoClient(uri, server_api=ServerApi('1'))
 
@@ -23,6 +25,7 @@ except Exception as e:
 app = Flask(__name__)
 cache_resultados = {}
 
+# 🚗 Driver configurado para Chromium
 def criar_driver():
     chrome_options = Options()
     chrome_options.binary_location = "/usr/bin/chromium"
@@ -30,7 +33,7 @@ def criar_driver():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
 
-    service = Service(ChromeDriverManager().install())
+    service = Service(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install())
     return webdriver.Chrome(service=service, options=chrome_options)
 
 @app.route('/comparar_precos', methods=['GET'])
