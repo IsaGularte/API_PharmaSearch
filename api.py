@@ -5,12 +5,12 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.utils import ChromeType
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 import json
 import os
 
-# MongoDB Atlas
 uri = os.getenv("MONGO_URI")
 client = MongoClient(uri, server_api=ServerApi('1'))
 
@@ -21,7 +21,18 @@ except Exception as e:
     print(f"Erro ao conectar no MongoDB: {e}")
 
 app = Flask(__name__)
-cache_resultados = {}  # Cache simples em memória
+cache_resultados = {}
+
+def criar_driver():
+    chrome_options = Options()
+    chrome_options.binary_location = "/usr/bin/chromium"
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    return webdriver.Chrome(
+        executable_path=ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install(),
+        options=chrome_options
+    )
 
 @app.route('/comparar_precos', methods=['GET'])
 def comparar_precos():
@@ -31,22 +42,13 @@ def comparar_precos():
 
     medicamento = medicamento.lower()
 
-    # Cache
     if medicamento in cache_resultados:
         return jsonify({'medicamentos': cache_resultados[medicamento]})
 
-    def criar_driver():
-        chrome_options = Options()
-        chrome_options.binary_location = "/usr/bin/chromium"
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        return webdriver.Chrome(executable_path=ChromeDriverManager().install(), options=chrome_options)
-
-    def buscar_maxxi(medicamento):
+    def buscar_maxxi(med):
         driver = criar_driver()
         try:
-            url = f"https://www.maxxieconomica.com/busca-produtos?busca={medicamento}"
+            url = f"https://www.maxxieconomica.com/busca-produtos?busca={med}"
             driver.get(url)
             WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, ".prodMaxxi__text"))
@@ -65,10 +67,10 @@ def comparar_precos():
         finally:
             driver.quit()
 
-    def buscar_sao_joao(medicamento):
+    def buscar_sao_joao(med):
         driver = criar_driver()
         try:
-            url = f"https://www.saojoaofarmacias.com.br/{medicamento.replace(' ', '%20')}?_q={medicamento.replace(' ', '%20')}&map=ft"
+            url = f"https://www.saojoaofarmacias.com.br/{med.replace(' ', '%20')}?_q={med.replace(' ', '%20')}&map=ft"
             driver.get(url)
             WebDriverWait(driver, 20).until(
                 EC.presence_of_element_located((By.TAG_NAME, 'script'))
@@ -97,24 +99,21 @@ def comparar_precos():
         finally:
             driver.quit()
 
-    resultados_maxxi = buscar_maxxi(medicamento)
-    resultados_sao_joao = buscar_sao_joao(medicamento)
-    todos = resultados_maxxi + resultados_sao_joao
-    todos_ordenados = sorted(todos, key=lambda x: x['preco']) if todos else []
+    maxxi = buscar_maxxi(medicamento)
+    sao_joao = buscar_sao_joao(medicamento)
+    todos = maxxi + sao_joao
+    ordenados = sorted(todos, key=lambda x: x['preco']) if todos else []
 
-    if todos_ordenados:
-        cache_resultados[medicamento] = todos_ordenados
+    if ordenados:
+        cache_resultados[medicamento] = ordenados
         db = client['pharmasearch']
         collection = db['medicamentos']
-        existente = collection.find_one({'medicamento': medicamento})
-
-        if not existente:
+        if not collection.find_one({'medicamento': medicamento}):
             collection.insert_one({
                 'medicamento': medicamento,
-                'dados': todos_ordenados[:5]
+                'dados': ordenados[:5]
             })
-
-        return jsonify({'medicamentos': todos_ordenados[:5]})
+        return jsonify({'medicamentos': ordenados[:5]})
     else:
         return jsonify({'erro': 'Nenhum medicamento encontrado'}), 404
 
