@@ -36,9 +36,9 @@ def criar_driver():
 
     # --- PONTO CRÍTICO: Tentar diferentes binary_locations e verificar a existência ---
     chrome_binary_paths = [
-        "/usr/bin/google-chrome",        # Comum para Google Chrome
+        "/usr/bin/chromium",              # Prioridade para Chromium
         "/usr/bin/chromium-browser",     # Comum para Chromium no Debian/Ubuntu
-        "/usr/bin/chromium"              # Outro caminho comum para Chromium
+        "/usr/bin/google-chrome"         # Comum para Google Chrome
     ]
     found_binary = False
     for path in chrome_binary_paths:
@@ -66,7 +66,7 @@ def criar_driver():
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
     chrome_options.add_argument('--disable-setuid-sandbox')
-    
+    chrome_options.add_argument("--remote-debugging-port=9222")  # Corrige erro DevToolsActivePort
     # Adicionar User-Agent para evitar detecção de bot e melhorar compatibilidade
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
 
