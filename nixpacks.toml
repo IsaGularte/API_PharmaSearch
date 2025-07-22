@@ -1,15 +1,19 @@
 [phases.setup]
 aptPkgs = [
   "chromium",
+  "chromium-driver",
   "libglib2.0-0",
   "libnss3",
   "libfontconfig1",
   "libxss1",
-  "libasound2t64",
+  "libasound2",
   "libatk1.0-0",
   "libgtk-3-0",
   "xvfb"
 ]
 
-[start]
-cmd = "gunicorn api:app"
+[phases.build]
+cmds = []
+
+[phases.start]
+cmds = ["gunicorn api:app --bind 0.0.0.0:$PORT"]
