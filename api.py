@@ -10,80 +10,80 @@ from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 import json
 import os
-import sys # Para saída de erro mais robusta
+import sys
 
 # --- Conexão com MongoDB Atlas ---
-# Garanta que a variável de ambiente MONGO_URI está configurada no Railway
 uri = os.getenv("MONGO_URI")
-client = None # Inicializa client como None
+client = None
 
 if not uri:
     print("ERRO: A variável de ambiente MONGO_URI não está configurada.", file=sys.stderr)
 else:
     try:
         client = MongoClient(uri, server_api=ServerApi('1'))
-        # Tenta um comando simples para verificar a conexão
         client.admin.command('ping')
         print("CONECTADO ao MongoDB com sucesso!")
     except Exception as e:
         print(f"ERRO ao conectar no MongoDB: {e}", file=sys.stderr)
-        client = None # Garante que client é None se a conexão falhar
+        client = None
 
 app = Flask(__name__)
-cache_resultados = {} # Cache simples em memória para resultados de busca
+cache_resultados = {}
 
 # --- Configuração do WebDriver para Ambientes Headless ---
 def criar_driver():
     chrome_options = Options()
 
-    # >>> PONTO CRÍTICO: Especifica o caminho do binário do Chromium no contêiner Railway.
-    # O pacote 'chromium' (instalado via apt no nixpacks.toml) geralmente coloca o executável aqui.
-    # Tente "/usr/bin/chromium-browser" primeiro. Se persistir o erro, troque para "/usr/bin/chromium".
-    try:
-        # Primeiro, verificamos se o caminho existe antes de atribuir
-        if os.path.exists("/usr/bin/chromium-browser"):
-            chrome_options.binary_location = "/usr/bin/chromium-browser"
-            print("Usando binary_location: /usr/bin/chromium-browser")
-        elif os.path.exists("/usr/bin/chromium"):
-            chrome_options.binary_location = "/usr/bin/chromium"
-            print("Usando binary_location: /usr/bin/chromium")
-        else:
-            # Se nenhum dos caminhos comuns for encontrado, loga um aviso e continua,
-            # mas o erro de 'command not found' ainda pode ocorrer.
-            print("AVISO: Chromium binary não encontrado nos caminhos esperados (/usr/bin/chromium-browser ou /usr/bin/chromium).", file=sys.stderr)
-            print("Verifique seu nixpacks.toml e os logs de build do Railway.", file=sys.stderr)
-
-    except Exception as e:
-        print(f"ERRO ao definir binary_location para o Chrome: {e}", file=sys.stderr)
-        # Não levanta um RuntimeError aqui, pois a exceção real virá do webdriver.Chrome()
+    # --- PONTO CRÍTICO: Tentar diferentes binary_locations e verificar a existência ---
+    chrome_binary_paths = [
+        "/usr/bin/google-chrome",        # Comum para Google Chrome
+        "/usr/bin/chromium-browser",     # Comum para Chromium no Debian/Ubuntu
+        "/usr/bin/chromium"              # Outro caminho comum para Chromium
+    ]
+    found_binary = False
+    for path in chrome_binary_paths:
+        if os.path.exists(path):
+            chrome_options.binary_location = path
+            print(f"Usando binary_location: {path}")
+            found_binary = True
+            break
+    
+    if not found_binary:
+        print("AVISO: Nenhum Chromium/Chrome binary encontrado nos caminhos esperados.", file=sys.stderr)
+        print("Verifique seu nixpacks.toml e os logs de build do Railway.", file=sys.stderr)
+        # Se não encontrou, o erro fatal virá do webdriver.Chrome() de qualquer forma.
 
     # Argumentos essenciais e adicionais para ambientes headless/server
     chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox") # Essencial para ambientes Docker/contêiner
-    chrome_options.add_argument("--disable-dev-shm-usage") # Reduz o uso de /dev/shm
-    chrome_options.add_argument("--disable-gpu") # Necessário para alguns sistemas headless
-    chrome_options.add_argument("--window-size=1920,1080") # Define um tamanho de janela padrão
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--ignore-certificate-errors")
     chrome_options.add_argument("--no-first-run")
-    chrome_options.add_argument("--single-process") # Pode ajudar em alguns ambientes
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled") # Para evitar detecção de bot
+    chrome_options.add_argument("--single-process")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
-    chrome_options.add_argument('--disable-setuid-sandbox') # Necessário para no-sandbox
+    chrome_options.add_argument('--disable-setuid-sandbox')
+    
+    # Adicionar User-Agent para evitar detecção de bot e melhorar compatibilidade
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
+
 
     try:
-        # ChromeDriverManager baixa o chromedriver compatível com a sua versão do Selenium
-        driver_path = ChromeDriverManager().install()
+       
+        driver_path = ChromeDriverManager().install() 
+
         service = Service(driver_path)
         print(f"ChromeDriver Service iniciado. Caminho do driver: {driver_path}")
         return webdriver.Chrome(service=service, options=chrome_options)
     except Exception as e:
         print(f"ERRO FATAL ao inicializar ChromeDriver/Navegador: {e}", file=sys.stderr)
-        print("Certifique-se de que o Chromium está instalado e acessível no contêiner.", file=sys.stderr)
-        # Levanta um erro Runtime para que a rota capture e retorne 500
+        print("Certifique-se de que o Chromium/Google Chrome está instalado e acessível no contêiner.", file=sys.stderr)
         raise RuntimeError(f"Falha ao inicializar Selenium WebDriver: {e}")
 
-# --- Rotas da API e Lógica de Busca ---
+# --- Rotas da API e Lógica de Busca (Sem Alterações Significativas Aqui) ---
 @app.route('/comparar_precos', methods=['GET'])
 def comparar_precos():
     medicamento = request.args.get('medicamento')
@@ -92,7 +92,6 @@ def comparar_precos():
 
     medicamento = medicamento.lower()
 
-    # Verifica o cache primeiro
     if medicamento in cache_resultados:
         print(f"Retornando resultados para '{medicamento}' do cache.")
         return jsonify({'medicamentos': cache_resultados[medicamento]})
@@ -105,7 +104,6 @@ def comparar_precos():
             print(f"Acessando Maxxi Econômica para: {med}")
             url = f"https://www.maxxieconomica.com/busca-produtos?busca={med}"
             driver.get(url)
-            # Aumenta o tempo de espera para dar mais chance à página carregar
             WebDriverWait(driver, 20).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, ".prodMaxxi__text"))
             )
@@ -136,7 +134,6 @@ def comparar_precos():
             print(f"Acessando São João Farmácias para: {med}")
             url = f"https://www.saojoaofarmacias.com.br/{med.replace(' ', '%20')}?_q={med.replace(' ', '%20')}&map=ft"
             driver.get(url)
-            # Espera pelos scripts LD+JSON que contêm os dados dos produtos
             WebDriverWait(driver, 25).until(
                 EC.presence_of_element_located((By.XPATH, "//script[@type='application/ld+json']"))
             )
@@ -157,7 +154,7 @@ def comparar_precos():
                                     preco = float(preco)
                                 except ValueError:
                                     print(f"AVISO São João: Preço '{preco}' para '{nome}' não pôde ser convertido.", file=sys.stderr)
-                                    continue # Pula este item se o preço não for válido
+                                    continue
 
                             resultados.append({'nome': nome, 'preco': preco, 'farmacia': 'São João'})
                 except json.JSONDecodeError as je:
@@ -175,38 +172,33 @@ def comparar_precos():
                 print("Driver da São João encerrado.")
 
     try:
-        # Tenta buscar nas farmácias
         medicamentos_maxxi = buscar_maxxi(medicamento)
         medicamentos_sao_joao = buscar_sao_joao(medicamento)
 
         todos = medicamentos_maxxi + medicamentos_sao_joao
         print(f"Total de resultados combinados após ambas as buscas: {len(todos)}")
 
-    except RuntimeError as e: # Captura o erro levantado por criar_driver
+    except RuntimeError as e:
         print(f"ERRO FATAL: Falha na inicialização do Selenium WebDriver para '{medicamento}'. Detalhes: {e}", file=sys.stderr)
         return jsonify({'erro': f'Não foi possível iniciar o navegador para buscar preços. Detalhes: {e}'}), 500
     except Exception as e:
         print(f"ERRO INESPERADO durante a busca de medicamentos: {e}", file=sys.stderr)
         return jsonify({'erro': f'Um erro inesperado ocorreu durante a busca. Detalhes: {e}'}), 500
 
-
     ordenados = sorted(todos, key=lambda x: x['preco']) if todos else []
 
     if ordenados:
-        cache_resultados[medicamento] = ordenados # Armazena todos os resultados no cache
+        cache_resultados[medicamento] = ordenados
         
-        # --- Persistência no MongoDB ---
-        if client: # Só tenta salvar se a conexão com o MongoDB foi bem-sucedida
+        if client:
             db = client['pharmasearch']
             collection = db['medicamentos']
             
             try:
-                # Usa upsert para inserir se não existir, ou atualizar se já existir
-                # Isso evita duplicatas para o mesmo medicamento e sempre garante que os 5 mais baratos estão lá
                 collection.update_one(
                     {'medicamento': medicamento},
-                    {'$set': {'dados': ordenados[:5]}}, # Salva os 5 mais baratos
-                    upsert=True # Cria um novo documento se não encontrar
+                    {'$set': {'dados': ordenados[:5]}},
+                    upsert=True
                 )
                 print(f"Resultados para '{medicamento}' salvos/atualizados no MongoDB.")
             except Exception as e:
@@ -214,14 +206,13 @@ def comparar_precos():
         else:
             print("AVISO: Conexão com MongoDB não estabelecida. Resultados não serão persistidos.", file=sys.stderr)
 
-        return jsonify({'medicamentos': ordenados[:5]}) # Retorna apenas os 5 mais baratos para o usuário
+        return jsonify({'medicamentos': ordenados[:5]})
     else:
         print(f"Nenhum medicamento encontrado para '{medicamento}' após todas as buscas.", file=sys.stderr)
         return jsonify({'erro': 'Nenhum medicamento encontrado'}), 404
 
 # --- Ponto de Entrada da Aplicação ---
 if __name__ == '__main__':
-    # Obtém a porta do ambiente (Railway define uma porta) ou usa 8080 como fallback
     port = int(os.environ.get("PORT", 8080))
     print(f"Iniciando a aplicação Flask na porta {port}...")
     app.run(host="0.0.0.0", port=port)
