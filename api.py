@@ -12,7 +12,7 @@ import json
 import os
 
 # 🔐 Conexão com MongoDB Atlas
-uri = os.getenv("MONGO_URI")
+uri = os.getenv("MONGO_URI") # Certifique-se de que MONGO_URI está configurado nas variáveis de ambiente do Railway
 client = MongoClient(uri, server_api=ServerApi('1'))
 
 try:
@@ -27,9 +27,11 @@ cache_resultados = {}
 # 🚗 Driver configurado para Chromium
 def criar_driver():
     chrome_options = Options()
-    # 🚨 REMOVEMOS ESTA LINHA: chrome_options.binary_location = "/usr/bin/chromium"
-    # Vamos deixar o ChromeDriver tentar encontrar o binário do Chromium no PATH do sistema,
-    # que deve conter /usr/bin onde o Nixpacks instala o Chromium.
+    # Adicionando a localização do binário do Chromium, se necessário.
+    # Em muitos ambientes Nixpacks que instalam 'chromium', o binário estará em /usr/bin/chromium.
+    # Mas o ChromeDriverManager geralmente configura isso implicitamente.
+    # Se o erro persistir mesmo com o nixpacks.toml, você pode tentar descomentar e ajustar esta linha:
+    # chrome_options.binary_location = "/usr/bin/chromium"
 
     # Argumentos essenciais e adicionais para ambientes headless/server
     chrome_options.add_argument("--headless")
@@ -45,17 +47,12 @@ def criar_driver():
     chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
     chrome_options.add_argument('--disable-setuid-sandbox')
 
-    # --- Configuração do Service para ChromeDriver ---
-    service_args = ["--verbose"] # Mantém o log verbose para depuração
     try:
+        # ChromeDriverManager.install() irá baixar o chromedriver adequado
+        # e o Service() irá usá-lo. O problema é o navegador (Chromium), não o driver.
         driver_path = ChromeDriverManager().install()
-        # Não precisamos mais mexer no PATH do service se não especificamos binary_location,
-        # pois o ChromeDriver usará o PATH do ambiente do container.
-        service = Service(driver_path, service_args=service_args)
-        print(f"ChromeDriver Service iniciado com log verbose. Caminho do driver: {driver_path}")
-        # A linha abaixo não é mais tão relevante se não estamos manipulando o PATH aqui.
-        # print(f"PATH usado pelo ChromeDriver Service: {service_env.get('PATH')}")
-
+        service = Service(driver_path) # Não precisamos de service_args=["--verbose"] em produção
+        print(f"ChromeDriver Service iniciado. Caminho do driver: {driver_path}")
     except Exception as e:
         print(f"Erro ao instalar ou localizar ChromeDriver: {e}")
         raise RuntimeError(f"Falha ao inicializar ChromeDriver: {e}")
@@ -158,6 +155,7 @@ def comparar_precos():
         cache_resultados[medicamento] = ordenados
         db = client['pharmasearch']
         collection = db['medicamentos']
+        # Verifica se o medicamento existe antes de tentar inserir
         if not collection.find_one({'medicamento': medicamento}):
             collection.insert_one({
                 'medicamento': medicamento,
