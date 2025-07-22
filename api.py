@@ -6,7 +6,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
-from webdriver_manager.utils import ChromeType
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 import json
@@ -33,7 +34,7 @@ def criar_driver():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
 
-    service = Service(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install())
+   service = Service(ChromeDriverManager().install())
     return webdriver.Chrome(service=service, options=chrome_options)
 
 @app.route('/comparar_precos', methods=['GET'])
