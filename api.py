@@ -5,9 +5,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager # Mantemos esta importação
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 import json
@@ -29,12 +27,29 @@ cache_resultados = {}
 # 🚗 Driver configurado para Chromium
 def criar_driver():
     chrome_options = Options()
+    # Mantém a localização explícita para o Chromium
     chrome_options.binary_location = "/usr/bin/chromium"
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    # Adicionando argumentos adicionais que podem ajudar em ambientes sem display
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--ignore-certificate-errors")
+    chrome_options.add_argument("--no-first-run")
+    chrome_options.add_argument("--single-process") # Pode ajudar a reduzir uso de recursos
 
-    service = Service(ChromeDriverManager().install())
+    try:
+        # Pega o caminho do ChromeDriver gerenciado pelo webdriver-manager
+        driver_path = ChromeDriverManager().install()
+        # Passa o caminho explicitamente para o Service
+        service = Service(driver_path)
+    except Exception as e:
+        print(f"Erro ao instalar ou localizar ChromeDriver: {e}")
+        # É importante levantar a exceção para que o Flask não continue
+        # com um driver não inicializado.
+        raise RuntimeError("Falha ao inicializar ChromeDriver")
+
     return webdriver.Chrome(service=service, options=chrome_options)
 
 @app.route('/comparar_precos', methods=['GET'])
@@ -49,8 +64,9 @@ def comparar_precos():
         return jsonify({'medicamentos': cache_resultados[medicamento]})
 
     def buscar_maxxi(med):
-        driver = criar_driver()
+        driver = None # Inicializa driver como None
         try:
+            driver = criar_driver() # Agora criar_driver pode levantar um erro
             url = f"https://www.maxxieconomica.com/busca-produtos?busca={med}"
             driver.get(url)
             WebDriverWait(driver, 10).until(
@@ -68,11 +84,13 @@ def comparar_precos():
             print(f"Erro ao acessar Maxxi: {e}")
             return []
         finally:
-            driver.quit()
+            if driver: # Garante que o driver seja fechado apenas se foi criado
+                driver.quit()
 
     def buscar_sao_joao(med):
-        driver = criar_driver()
+        driver = None # Inicializa driver como None
         try:
+            driver = criar_driver() # Agora criar_driver pode levantar um erro
             url = f"https://www.saojoaofarmacias.com.br/{med.replace(' ', '%20')}?_q={med.replace(' ', '%20')}&map=ft"
             driver.get(url)
             WebDriverWait(driver, 20).until(
@@ -100,9 +118,15 @@ def comparar_precos():
             print(f"Erro ao acessar São João: {e}")
             return []
         finally:
-            driver.quit()
+            if driver: # Garante que o driver seja fechado apenas se foi criado
+                driver.quit()
 
-    resultados = buscar_maxxi(medicamento) + buscar_sao_joao(medicamento)
+    try:
+        resultados = buscar_maxxi(medicamento) + buscar_sao_joao(medicamento)
+    except RuntimeError as e:
+        # Se a criação do driver falhar, retorne um erro amigável ao usuário
+        return jsonify({'erro': str(e)}), 500
+
     ordenados = sorted(resultados, key=lambda x: x['preco']) if resultados else []
 
     if ordenados:
