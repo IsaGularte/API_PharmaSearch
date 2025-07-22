@@ -27,14 +27,15 @@ cache_resultados = {}
 # 🚗 Driver configurado para Chromium
 def criar_driver():
     chrome_options = Options()
-    # 🎯 MUITO IMPORTANTE: Especificar explicitamente o caminho do executável do Chromium.
-    chrome_options.binary_location = "/usr/bin/chromium" # Caminho do Chromium no Railway
+    # 🚨 REMOVEMOS ESTA LINHA: chrome_options.binary_location = "/usr/bin/chromium"
+    # Vamos deixar o ChromeDriver tentar encontrar o binário do Chromium no PATH do sistema,
+    # que deve conter /usr/bin onde o Nixpacks instala o Chromium.
 
     # Argumentos essenciais e adicionais para ambientes headless/server
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu") # Sempre bom em headless
+    chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--ignore-certificate-errors")
     chrome_options.add_argument("--no-first-run")
@@ -44,37 +45,19 @@ def criar_driver():
     chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
     chrome_options.add_argument('--disable-setuid-sandbox')
 
-    # Adicionar o argumento Xvfb se o XVFB for usado
-    # (Embora o Nixpacks deva lidar com isso, explicitamente não custa)
-    # chrome_options.add_argument('--display=:99') # Não necessário se XVFB for configurado para iniciar automaticamente ou se já for headless
-
     # --- Configuração do Service para ChromeDriver ---
-    # Manter log verbose para depuração.
-    # log_output='stderr' faz com que os logs do chromedriver apareçam nos logs do Railway.
-    service_args = ["--verbose"]
-    # service = Service(driver_path, service_args=service_args, log_output='stderr') # Para Selenium 4.6+
-    # Para Selenium 4.10.0 (sua versão), 'log_output' pode não estar disponível diretamente no Service
-    # mas o '--verbose' em service_args já joga para o stderr.
-
+    service_args = ["--verbose"] # Mantém o log verbose para depuração
     try:
         driver_path = ChromeDriverManager().install()
-        # Ao criar o Service, você pode definir a variável de ambiente PATH
-        # para garantir que o Chromium seja encontrado.
-        service_env = os.environ.copy()
-        # Garante que /usr/bin está no PATH para o ChromeDriver encontrar o 'chromium'
-        if '/usr/bin' not in service_env.get('PATH', ''):
-            service_env['PATH'] = f"{service_env.get('PATH', '')}:/usr/bin" if service_env.get('PATH') else "/usr/bin"
-
-        service = Service(driver_path, service_args=service_args, env=service_env)
+        # Não precisamos mais mexer no PATH do service se não especificamos binary_location,
+        # pois o ChromeDriver usará o PATH do ambiente do container.
+        service = Service(driver_path, service_args=service_args)
         print(f"ChromeDriver Service iniciado com log verbose. Caminho do driver: {driver_path}")
-        print(f"PATH usado pelo ChromeDriver Service: {service_env.get('PATH')}")
+        # A linha abaixo não é mais tão relevante se não estamos manipulando o PATH aqui.
+        # print(f"PATH usado pelo ChromeDriver Service: {service_env.get('PATH')}")
 
     except Exception as e:
         print(f"Erro ao instalar ou localizar ChromeDriver: {e}")
-        # Captura as mensagens de erro do Service, que agora devem ser mais detalhadas.
-        if "session not created" in str(e).lower() and "chrome failed to start" in str(e).lower():
-            print("Provável causa: Chromium não está iniciando corretamente no container.")
-            print("Verifique dependências APT e argumentos do ChromeOptions.")
         raise RuntimeError(f"Falha ao inicializar ChromeDriver: {e}")
 
     return webdriver.Chrome(service=service, options=chrome_options)
@@ -90,7 +73,6 @@ def comparar_precos():
     if medicamento in cache_resultados:
         return jsonify({'medicamentos': cache_resultados[medicamento]})
 
-    # As funções de busca permanecem as mesmas, pois o problema não é nelas, mas na inicialização do driver.
     def buscar_maxxi(med):
         driver = None
         try:
