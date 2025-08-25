@@ -1,0 +1,6 @@
+Flask==3.0.3
+selenium==4.23.1
+selenium-wire==5.1.0
+pymongo==4.10.1
+brotli==1.1.0
+gunicorn==23.0.0
