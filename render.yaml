@@ -3,14 +3,31 @@ services:
     name: api-pharmasearch
     env: python
     plan: free
-    region: brazil # Confirme se esta é a sua região ou mude conforme necessário
-    
+    region: oregon # ou a região que você preferir, ex: frankfurt
+
+    # Buildpack para instalar o Google Chrome no ambiente de deploy
     buildpacks:
       - url: https://github.com/render-inc/chrome-buildpack
 
+    # Comando para instalar as dependências
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn --worker-class gevent --workers 2 --bind 0.0.0.0:$PORT app:app"
+    
+    # Comando para iniciar o servidor com Gunicorn (ótimo para produção)
+    # Aumentamos o timeout para 60s para dar tempo aos scrapers
+    startCommand: "gunicorn --worker-class gevent --workers 3 --bind 0.0.0.0:$PORT --timeout 60 app:app"
 
+    # Variáveis de Ambiente Essenciais
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11 # Especifique a versão do Python
+        value: 3.11
+      - key: MONGO_URI
+        # IMPORTANTE: Cole sua string de conexão do MongoDB aqui ou configure-a
+        # diretamente no painel de "Environment" do Render para maior segurança.
+        value: "mongodb+srv://admin:ilovepharmasearch@pharmasearch-cluster.facv1dr.mongodb.net/?retryWrites=true&w=majority&appName=pharmasearch-cluster"
+      
+      # Caminhos que o chrome-buildpack do Render utiliza.
+      # O nosso código Python usará essas variáveis.
+      - key: GOOGLE_CHROME_BIN
+        value: /usr/bin/google-chrome
+      - key: CHROMEDRIVER_PATH
+        value: /usr/bin/chromedriver
