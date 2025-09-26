@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: api-pharmasearch
+    env: python
+    plan: free
+    region: brazil # Confirme se esta é a sua região ou mude conforme necessário
+    
+    buildpacks:
+      - url: https://github.com/render-inc/chrome-buildpack
+
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn --worker-class gevent --workers 2 --bind 0.0.0.0:$PORT app:app"
+
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11 # Especifique a versão do Python
