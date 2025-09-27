@@ -14,17 +14,9 @@ services:
     buildCommand: "pip install -r requirements.txt"
     
     # Comando para iniciar o servidor com Gunicorn
-    # Timeout aumentado para 60s para dar tempo aos scrapers de executarem
     startCommand: "gunicorn --worker-class gevent --workers 3 --bind 0.0.0.0:$PORT --timeout 60 app:app"
 
-    # Apenas variáveis não-secretas devem ficar aqui.
-    # As outras (MONGO_URI, CHROME_BIN, etc.) serão configuradas no painel do Render.
+    # Variáveis de Ambiente
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11```
-
----
-
-### **Arquivo 2: `requirements.txt` (Completo)**
-
-Esta lista contém todas as dependências necessárias para o projeto funcionar.
+        value: 3.11.9 
