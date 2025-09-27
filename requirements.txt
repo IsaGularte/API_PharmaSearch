@@ -1,11 +1,10 @@
 Flask==3.0.3
 gunicorn==23.0.0
 pymongo==4.10.1
-selenium==4.23.1
+undetected-chromedriver==3.5.5 
 selenium-wire==5.1.0
 blinker==1.6.2
 brotli==1.1.0
 dnspython==2.7.0
 setuptools==75.1.0
-webdriver-manager==4.0.2
 gevent==24.2.1
