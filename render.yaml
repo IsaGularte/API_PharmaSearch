@@ -1,22 +1,17 @@
-# render.yaml
 services:
   - type: web
     name: api-pharmasearch
     env: python
     plan: free
-    region: oregon # Mude para a sua região preferida, se necessário
+    region: oregon
 
-    # Buildpack essencial para instalar o Google Chrome
     buildpacks:
       - url: https://github.com/render-inc/chrome-buildpack
 
-    # Comando para instalar as dependências
     buildCommand: "pip install -r requirements.txt"
     
-    # Comando para iniciar o servidor com Gunicorn
     startCommand: "gunicorn --worker-class gevent --workers 3 --bind 0.0.0.0:$PORT --timeout 60 app:app"
 
-    # Variáveis de Ambiente
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.9 
+        value: 3.11.9
