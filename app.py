@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # --- Conexão Segura com MongoDB via Variável de Ambiente ---
 MONGO_URI = os.environ.get("MONGO_URI")
 if not MONGO_URI:
-    logger.error("A variável de ambiente MONGO_URI não foi definida.")
+    logger.critical("A variável de ambiente MONGO_URI não foi definida. A aplicação não pode iniciar.")
     raise ValueError("A variável de ambiente MONGO_URI não foi definida.")
 
 try:
@@ -37,19 +37,18 @@ try:
     client.admin.command('ping')
     logger.info("Conexão com MongoDB estabelecida com sucesso!")
 except Exception as e:
-    logger.error(f"Falha ao conectar com o MongoDB: {e}")
-    # A aplicação não pode funcionar sem o DB, então encerramos.
+    logger.critical(f"Falha ao conectar com o MongoDB: {e}")
     raise
 
 app = Flask(__name__)
 db = client['pharmasearch']
 medicamentos_collection = db['medicamentos']
-
-# Cache em memória para requisições muito rápidas e repetidas
 cache_memoria = {}
 
-# --- Função Otimizada para Criar Driver do Chrome (Render + Local) ---
+# --- Função Otimizada para Criar Driver do Chrome (COM DIAGNÓSTICO) ---
 def criar_driver_chrome(use_selenium_wire=False):
+    logger.info("Iniciando a criação do driver do Chrome.")
+    
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
@@ -63,22 +62,43 @@ def criar_driver_chrome(use_selenium_wire=False):
 
     # Lógica para funcionar tanto no Render quanto localmente
     if os.environ.get("RENDER"):
-        logger.info("Ambiente Render detectado. Usando caminhos de binários definidos.")
-        chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN")
-        service = Service(executable_path=os.environ.get("CHROMEDRIVER_PATH"))
+        logger.info("Ambiente Render detectado.")
+        
+        # LOGS DE DIAGNÓSTICO CRUCIAIS
+        chrome_bin = os.environ.get("GOOGLE_CHROME_BIN")
+        chromedriver_path = os.environ.get("CHROMEDRIVER_PATH")
+        
+        logger.info(f"Valor lido de GOOGLE_CHROME_BIN: {chrome_bin}")
+        logger.info(f"Valor lido de CHROMEDRIVER_PATH: {chromedriver_path}")
+
+        if not chrome_bin or not chromedriver_path:
+            logger.critical("ERRO: Variáveis de ambiente para o Chrome não encontradas no Render!")
+            raise RuntimeError("Variáveis de ambiente do Chrome (GOOGLE_CHROME_BIN, CHROMEDRIVER_PATH) não configuradas no ambiente Render.")
+
+        chrome_options.binary_location = chrome_bin
+        service = Service(executable_path=chromedriver_path)
+        logger.info("Configurando Service e Options para o ambiente Render.")
+        
     else:
         logger.info("Ambiente local detectado. Usando webdriver-manager.")
         service = Service(ChromeDriverManager().install())
 
-    if use_selenium_wire:
-        return seleniumwire_webdriver.Chrome(service=service, options=chrome_options)
-    return webdriver.Chrome(service=service, options=chrome_options)
+    logger.info("Instanciando o driver...")
+    try:
+        if use_selenium_wire:
+            driver = seleniumwire_webdriver.Chrome(service=service, options=chrome_options)
+        else:
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+        logger.info("Driver criado com sucesso.")
+        return driver
+    except Exception as e:
+        logger.critical(f"Falha final ao instanciar o webdriver do Chrome: {e}", exc_info=True)
+        raise
 
-# --- Funções de Scraping (Refatoradas e mais Robustas) ---
-
+# --- Funções de Scraping (sem alterações, já estavam robustas) ---
 def buscar_maxxi(medicamento):
-    """Scraper robusto para Maxxi, iterando sobre cards de produtos."""
     driver = criar_driver_chrome()
+    # ... (código da função buscar_maxxi como na resposta anterior)
     resultados = []
     url = f"https://www.maxxieconomica.com/busca-produtos?busca={medicamento}"
     logger.info(f"Buscando na Maxxi: {url}")
@@ -105,8 +125,7 @@ def buscar_maxxi(medicamento):
                     "link": link, "farmacia": "Maxxi"
                 })
             except Exception:
-                # Ignora um card de produto que falhou, mas continua o processo
-                logger.warning(f"Falha ao processar um item da Maxxi.", exc_info=True)
+                logger.warning(f"Falha ao processar um item da Maxxi.", exc_info=False)
                 continue
         return resultados
     except Exception as e:
@@ -116,8 +135,8 @@ def buscar_maxxi(medicamento):
         driver.quit()
 
 def buscar_sao_joao(medicamento):
-    """Scraper para São João usando JSON-LD, uma abordagem eficiente."""
     driver = criar_driver_chrome()
+    # ... (código da função buscar_sao_joao como na resposta anterior)
     resultados = []
     url = f"https://www.saojoaofarmacias.com.br/{medicamento.replace(' ', '%20')}?_q={medicamento.replace(' ', '%20')}&map=ft"
     logger.info(f"Buscando na São João: {url}")
@@ -154,8 +173,8 @@ def buscar_sao_joao(medicamento):
         driver.quit()
 
 def buscar_panvel(medicamento):
-    """Scraper para Panvel que intercepta a chamada de API, muito mais rápido e confiável."""
     driver = criar_driver_chrome(use_selenium_wire=True)
+    # ... (código da função buscar_panvel como na resposta anterior)
     url = f"https://www.panvel.com/panvel/buscarProduto.do?termoPesquisa={medicamento}"
     logger.info(f"Buscando na Panvel: {url}")
     try:
@@ -189,22 +208,21 @@ def buscar_panvel(medicamento):
     finally:
         driver.quit()
 
-# --- Rota Principal da API ---
+# --- Rota Principal da API (sem alterações) ---
 @app.route('/comparar_precos', methods=['GET'])
 def comparar_precos():
+    # ... (código da rota como na resposta anterior)
     medicamento = request.args.get('medicamento')
     if not medicamento:
         return jsonify({'erro': 'O parâmetro "medicamento" é obrigatório.'}), 400
 
     medicamento_key = medicamento.lower().strip()
 
-    # 1. Verificar cache em memória (super rápido)
     if medicamento_key in cache_memoria:
         if (datetime.utcnow() - cache_memoria[medicamento_key]['timestamp']) < timedelta(hours=1):
             logger.info(f"Retornando dados do CACHE DE MEMÓRIA para '{medicamento_key}'")
             return jsonify(cache_memoria[medicamento_key]['dados'])
 
-    # 2. Verificar cache no MongoDB (persistente)
     cache_ttl = timedelta(hours=4)
     documento_cache = medicamentos_collection.find_one({'_id': medicamento_key})
     if documento_cache and (datetime.utcnow() - documento_cache['timestamp']) < cache_ttl:
@@ -213,7 +231,6 @@ def comparar_precos():
         cache_memoria[medicamento_key] = {'dados': response_data, 'timestamp': datetime.utcnow()}
         return jsonify(response_data)
 
-    # 3. Se não houver cache válido, executar o scraping em paralelo
     logger.info(f"Nenhum cache válido encontrado. Iniciando scraping para '{medicamento_key}'...")
     
     todos_os_resultados = []
@@ -238,16 +255,14 @@ def comparar_precos():
     if not todos_os_resultados:
         return jsonify({'erro': 'Nenhum medicamento encontrado com este nome.'}), 404
 
-    # Ordenar e preparar a resposta
     todos_ordenados = sorted(todos_os_resultados, key=lambda x: x['preco'])
     response_data = {
-        'medicamentos': todos_ordenados[:15], # Limita a resposta para 15 itens
+        'medicamentos': todos_ordenados[:15],
         'total_encontrado': len(todos_ordenados),
         'farmacias_consultadas': list(farmacias_a_buscar.keys()),
         'fonte': 'live_scrape'
     }
 
-    # 4. Salvar os novos resultados no cache (MongoDB e memória)
     medicamentos_collection.update_one(
         {'_id': medicamento_key},
         {'$set': {'dados': todos_ordenados[:15], 'timestamp': datetime.utcnow()}},
@@ -259,6 +274,5 @@ def comparar_precos():
     return jsonify(response_data)
 
 if __name__ == '__main__':
-    # Use a porta definida pelo ambiente ou 5000 como padrão
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
